@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>ASO Cross-Locale Keywords Synchronizer</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: sans-serif;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        .field {
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .field label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .char-count {
+            color: gray;
+        }
+
+        .char-count.error {
+            color: red;
+        }
+
+        .output {
+            margin-top: 20px;
+        }
+
+        .output p {
+            margin: 0.5em 0;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .success {
+            color: green;
+        }
+
+        .duplicates {
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+
+        .duplicates ul {
+            list-style-type: disc;
+            margin-left: 20px;
+            padding: 0;
+        }
+
+        .duplicate-message {
+            color: red;
+            margin-top: 4px;
+            font-size: 0.8em;
+            bottom: 5px;
+            left: 0;
+        }
+
+        .duplicate-highlight {
+            border-color: red;
+        }
+
+        .red-label {
+            background-color: red;
+            color: white;
+            padding: 4px;
+        }
+
+        .orange-label {
+            background-color: orange;
+            color: white;
+            padding: 4px;
+        }
+
+        .green-checkmark {
+            background-color: green;
+            color: white;
+            position: relative;
+        }
+
+        .green-checkmark::before {
+            content: '\2714';
+            color: white;
+            margin: 0 4px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>ASO Cross-Locale Keywords Synchronizer (for en-US cross-localization)</h1>
+
+    <h3>Most important keywords or phrases for your app (comma or line break separated)</h3>
+    <div class="field">
+        <textarea id="important-keywords"></textarea>
+        <div id="important-keywords-not-in-list" class="duplicate-message"></div>
+    </div>
+
+    <div id="locale-buttons">
+        <a href="#" onclick="switchLocale('EN_US')">EN_US</a> |
+        <a href="#" onclick="switchLocale('AR')">AR</a> |
+        <a href="#" onclick="switchLocale('ZH_HANS')">ZH_HANS</a> |
+        <a href="#" onclick="switchLocale('ZH_HANT')">ZH_HANT</a> |
+        <a href="#" onclick="switchLocale('FR')">FR</a> |
+        <a href="#" onclick="switchLocale('KO')">KO</a> |
+        <a href="#" onclick="switchLocale('PT_BR')">PT_BR</a> |
+        <a href="#" onclick="switchLocale('RU')">RU</a> |
+        <a href="#" onclick="switchLocale('ES_MX')">ES_MX</a> |
+        <a href="#" onclick="switchLocale('VI')">VI</a> |
+        <a href="#" onclick="switchLocale('OTHER')">OTHER</a>
+    </div>
+
+    <h3 id="current-locale">Inputs</h3>
+
+    <div class="field" </div>
+        <label for="name">Name: <span id="name-char-count" class="char-count">0 / 30</span></label>
+        <input type="text" id="name">
+        <div id="name-duplicate" class="duplicate-message"></div>
+    </div>
+    <div class="field">
+        <label for="subtitle">Subtitle: <span id="subtitle-char-count" class="char-count">0 / 30</span></label>
+        <input type="text" id="subtitle">
+        <div id="subtitle-duplicate" class="duplicate-message"></div>
+    </div>
+    <div class="field">
+        <label for="keywords">Keywords (comma-separated, no spaces): <span id="keywords-char-count" class="char-count">0
+                /
+                100</span></label>
+        <input type="text" id="keywords">
+        <div id="keywords-duplicate" class="duplicate-message"></div>
+    </div>
+
+    <h2>Apple Algorithm String (maybe):</h2>
+    <pre id="apple-search-terms"></pre>
+
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+            <td style="vertical-align: top;" width="33%">
+                <p><strong>Unique Keywords:</strong></p>
+                <ul id="unique-keywords" style="display: inline-block;"></ul>
+            </td>
+            <td style="vertical-align: top;" width="33%">
+                <p><strong>Unique Pairs of Top Keywords:</strong></p>
+                <ul id="unique-keyword-pairs" style="display: inline-block;"></ul>
+            </td>
+            <td style="vertical-align: top;" width="33%">
+                <p><strong>Unique Triplets of Top Keywords:</strong></p>
+                <ul id="unique-keyword-trairs" style="display: inline-block;"></ul>
+            </td>
+        </tr>
+    </table>
+
+    <script>
+        const nameInput = document.getElementById('name');
+        const subtitleInput = document.getElementById('subtitle');
+        const keywordsInput = document.getElementById('keywords');
+        const importantKeywordsInput = document.getElementById('important-keywords');
+        const nameCharCount = document.getElementById('name-char-count');
+        const subtitleCharCount = document.getElementById('subtitle-char-count');
+        const keywordsCharCount = document.getElementById('keywords-char-count');
+        const appleSearchTerms = document.getElementById('apple-search-terms');
+        const uniqueKeywords = document.getElementById('unique-keywords');
+        const uniqueKeywordPairs = document.getElementById('unique-keyword-pairs');
+        const uniqueKeywordTrairs = document.getElementById('unique-keyword-trairs');
+
+        const nameDuplicate = document.getElementById('name-duplicate');
+        const subtitleDuplicate = document.getElementById('subtitle-duplicate');
+        const keywordsDuplicate = document.getElementById('keywords-duplicate');
+
+        const stopwords = "a, about, above, after, again, against, all, am, an, and, any, app, are, aren't, as, at, be, because, been, before, being, below , between, both, but, by, can't, cannot, could, couldn't, did, didn't, do, does, doesn't, doing, don't, down, during, each, few, for , from, further, had, hadn't, has, hasn't, have, haven't, having, he, he'd, he'll, he's, her, here, here's, hers, herself, him, himself , his, how, how's, i, i'd, i'll, i'm, i've, if, in, into, is, isn't, it, it's, its, itself, let's, me, more , most, mustn't, my, myself, no, nor, not, of, off, on, once, only, or, other, ought, our, ours, ourselves, out, over, own, same, shan't , she, she'd, she'll, she's, should, shouldn't, so, some, such, than, that, that's, the, their, theirs, them, themselves, then, there, there's, these, they , they'd, they'll, they're, they've, this, those, through, to, too, under, until, up, very, was, wasn't, we, we'd, we'll , we're, we've, were, weren't, widget, what, what's, when, when's, where, where's, which, while, who, who's, whom, why, why's, with, won't, would, wouldn't, you, you'd, you'll, you're, you've, your, yours, yourself, yourselves".split(', ');
+
+        var currentLocale = 'EN_US';
+        var localeData = {};
+
+        function switchLocale(locale) {
+            currentLocale = locale;
+            document.getElementById('current-locale').textContent = `Inputs (Locale: ${locale})`;
+            updateInputs();
+            updateOutput();
+        }
+
+        function updateInputs() {
+            if (!localeData[currentLocale]) {
+                localeData[currentLocale] = { name: '', subtitle: '', keywords: '' };
+            }
+            document.getElementById('name').value = localeData[currentLocale].name || '';
+            document.getElementById('subtitle').value = localeData[currentLocale].subtitle || '';
+            document.getElementById('keywords').value = localeData[currentLocale].keywords || '';
+        }
+
+        function countUnicodeChars(str) {
+            let count = 0;
+            for (let i = 0; i < str.length; i++) {
+                count += str.charCodeAt(i) > 127 ? 2 : 1;
+            }
+            return count;
+        }
+
+        function updateOutput() {
+            const name = nameInput.value.trim();
+            const subtitle = subtitleInput.value.trim();
+            const keywords = keywordsInput.value.trim().toLowerCase().split(/,/u).map(k => k.trim()).filter(k => k);
+            const importantKeywords = importantKeywordsInput.value.trim().toLowerCase().split(/,|\n|\r/u).map(k => k.trim()).filter(k => k);
+            const importantKeywordTerms = importantKeywords.map(keyword => keyword.replace(/[^\p{L}\p{N}]+/gu, '-'))
+
+            const nameWords = name.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w);
+            const subtitleWords = subtitle.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(w => w);
+            const allKeywords = [...nameWords, ...subtitleWords, ...keywords];
+
+            const unique = [...new Set(allKeywords)];
+            const duplicates = allKeywords.filter((item, index) => allKeywords.indexOf(item) !== index);
+            const duplicateOccurrences = {};
+
+            // Reset duplicate messages and highlighting
+            nameDuplicate.textContent = '';
+            subtitleDuplicate.textContent = '';
+            keywordsDuplicate.textContent = '';
+            nameInput.classList.remove('duplicate-highlight');
+            subtitleInput.classList.remove('duplicate-highlight');
+            keywordsInput.classList.remove('duplicate-highlight');
+
+            allKeywords.forEach((keyword, index) => {
+                const isDuplicate = duplicates.includes(keyword);
+                const isStopword = stopwords.includes(keyword);
+                const isPlural = keyword.endsWith('s');
+                if (isDuplicate) {
+                    const htmlToAdd = '<span class="red-label">' + keyword + ' (duplicate)</span>';
+                    if (index < nameWords.length) {
+                        nameInput.classList.add('duplicate-highlight');
+                        nameDuplicate.innerHTML += htmlToAdd;
+                    } else if (index < nameWords.length + subtitleWords.length) {
+                        subtitleInput.classList.add('duplicate-highlight');
+                        subtitleDuplicate.innerHTML += htmlToAdd;
+                    } else {
+                        keywordsInput.classList.add('duplicate-highlight');
+                        keywordsDuplicate.innerHTML += htmlToAdd;
+                    }
+                }
+                if (isStopword) {
+                    const htmlToAdd = '<span class="orange-label">' + keyword + ' (stopword)</span>';
+                    if (index >= nameWords.length + subtitleWords.length) {
+                        keywordsInput.classList.add('duplicate-highlight');
+                        keywordsDuplicate.innerHTML += htmlToAdd;
+                    }
+                }
+                if (isPlural) {
+                    const htmlToAdd = '<span class="orange-label">' + keyword + ' (plural)</span>';
+                    if (index >= nameWords.length + subtitleWords.length) {
+                        keywordsInput.classList.add('duplicate-highlight');
+                        keywordsDuplicate.innerHTML += htmlToAdd;
+                    }
+                }
+            });
+
+            // Character Counts
+            const nameCount = countUnicodeChars(name);
+            nameCharCount.textContent = `${nameCount} / 30`;
+            nameCharCount.classList.toggle('error', nameCount > 30);
+
+            const subtitleCount = countUnicodeChars(subtitle);
+            subtitleCharCount.textContent = `${subtitleCount} / 30`;
+            subtitleCharCount.classList.toggle('error', subtitleCount > 30);
+
+            const keywordsCount = countUnicodeChars(keywords.join(','));
+            keywordsCharCount.textContent = `${keywordsCount} / 100`;
+            keywordsCharCount.classList.toggle('error', keywordsCount > 100);
+
+            // Outputs 
+            const appleTerm = allKeywords.join('-').toLowerCase();
+            appleSearchTerms.textContent = appleTerm;
+
+            uniqueKeywords.innerHTML = '';
+            unique.forEach(keyword => {
+                const li = document.createElement('li');
+                li.textContent = keyword;
+                if (importantKeywordTerms.includes(keyword)) {
+                    li.classList.add('green-checkmark');
+                }
+                uniqueKeywords.appendChild(li);
+            });
+            // generate unique pairs
+            uniqueKeywordPairs.innerHTML = '';
+            for (let i = 0; i < unique.length - 1; i++) {
+                const pair = `${unique[i]} ${unique[i + 1]}`;
+                const li = document.createElement('li');
+                li.textContent = pair;
+                if (importantKeywordTerms.includes(pair.replace(/\s+/g, '-'))) {
+                    li.classList.add('green-checkmark');
+                }
+                uniqueKeywordPairs.appendChild(li);
+            }
+
+            // the same for traits
+            uniqueKeywordTrairs.innerHTML = '';
+            for (let i = 0; i < unique.length - 2; i++) {
+                const pair = `${unique[i]} ${unique[i + 1]} ${unique[i + 2]}`;
+                const li = document.createElement('li');
+                li.textContent = pair;
+                if (importantKeywordTerms.includes(pair.replace(/\s+/g, '-'))) {
+                    li.classList.add('green-checkmark');
+                }
+                uniqueKeywordTrairs.appendChild(li);
+            }
+
+            // Important Keywords Validation
+            const allTermsFromEveryLocaleSeparate = Object.values(localeData).map(data => data.appleTerm);
+            const invalidKeywords = findMissingKeywords(allTermsFromEveryLocaleSeparate, importantKeywordTerms);
+
+            console.log('invalidKeywords', invalidKeywords);
+            console.log('allTermsFromEveryLocaleSeparate', allTermsFromEveryLocaleSeparate);
+            console.log('importantKeywordTerms', importantKeywordTerms);
+
+            if (invalidKeywords.length > 0) {
+                document.querySelector('#important-keywords-not-in-list').innerHTML = `<span class="orange-label">This important keywords not found in any locale: <strong>${invalidKeywords.join(', ')}</strong></span>`;
+            } else {
+                document.querySelector('#important-keywords-not-in-list').innerHTML = '';
+            }
+
+            // Local Storage
+            localeData[currentLocale] = { name, subtitle, keywords: keywords.join(','), appleTerm };
+            localStorage.setItem('data', JSON.stringify(localeData));
+        }
+
+        function findMissingKeywords(stringsArray, keywords) {
+            const keywordExists = (str, keyword) => {
+                const extendedStr = '-' + str + '-';
+                const keywordPattern = new RegExp(`-${keyword}-`, 'g');
+                return extendedStr.match(keywordPattern) !== null;
+            };
+
+            const validStrings = stringsArray.filter(str => str && str.length > 0);
+
+            return keywords.filter(keyword => {
+                return !validStrings.some(str => keywordExists(str, keyword));
+            });
+        }
+
+        // Input Event Listeners
+        nameInput.addEventListener('input', updateOutput);
+        subtitleInput.addEventListener('input', updateOutput);
+        keywordsInput.addEventListener('input', updateOutput);
+        importantKeywordsInput.addEventListener('input', updateOutput);
+
+        // Data Loading
+        localeData = JSON.parse(localStorage.getItem('data')) || {};
+        switchLocale(currentLocale);
+    </script>
+</body>
+
+</html>
